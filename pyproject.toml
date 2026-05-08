@@ -14,4 +14,7 @@ dependencies = [
     "langchain-community>=0.4.1",
     "bs4>=0.0.2",
     "pypdf>=6.10.2",
+    "langchain-ollama>=1.1.0",
+    "sentence-transformers>=5.4.1",
+    "langchain-chroma>=1.1.0",
 ]

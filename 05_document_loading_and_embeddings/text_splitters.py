@@ -5,12 +5,9 @@ Optimizing document chunks for RAG
 
 from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
-    CharacterTextSplitter,
-    TokenTextSplitter,
     MarkdownHeaderTextSplitter,
     Language,
 )
-from langchain_core.documents import Document
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -162,9 +159,8 @@ def code_splitter():
 
 def document_splitter():
     from langchain_community.document_loaders import PyPDFLoader
-    from langchain_core.documents import Document
 
-    loader = PyPDFLoader("./docs/langchain_demo.pdf")
+    loader = PyPDFLoader("./data/langchain_demo.pdf")
     docs = loader.load()
 
     print(f"Loaded {len(docs)} documents from PDF.")
