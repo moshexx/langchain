@@ -8,7 +8,7 @@ import os
 from typing import List
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-from langsmith import traceable, Client
+from langsmith import traceable
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -19,11 +19,12 @@ from langchain_openai import ChatOpenAI
 def setup_environment():
     """Initialize environment variables and LangSmith tracing."""
     load_dotenv()
-    
+
     if os.getenv("LANGCHAIN_API_KEY"):
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
         os.environ.setdefault("LANGCHAIN_PROJECT", "Smart Q&A Bot Project")
-        print(f"🚀 LangSmith configured - Project: {os.environ.get('LANGCHAIN_PROJECT')}")
+        project_name = os.environ.get('LANGCHAIN_PROJECT')
+        print(f"🚀 LangSmith configured - Project: {project_name}")
     else:
         print("⚠️ LangSmith API Key not found. Tracing is disabled.")
 
@@ -55,7 +56,7 @@ class SmartQABot:
             model=model_name,
             temperature=temperature,
         ).with_structured_output(QAResponse)
-        
+
         self.prompt = self._create_prompt_template()
         self.chain = self.prompt | self.model
 
@@ -63,7 +64,7 @@ class SmartQABot:
         """Define the system instructions and message structure."""
         return ChatPromptTemplate.from_messages([
             ("system", """You are a highly capable and honest Q&A assistant.
-            
+
 Your guidelines:
 - Provide accurate and concise answers.
 - Be transparent about uncertainty; set confidence to 'low' if you aren't sure.
@@ -103,10 +104,12 @@ Your guidelines:
 def print_separator(char: str = "=", length: int = 60):
     print(char * length)
 
+
 def print_header(title: str):
     print_separator()
     print(title.center(60))
     print_separator()
+
 
 def display_response(question: str, response: QAResponse):
     """Format and print the bot's structured output."""
@@ -116,7 +119,10 @@ def display_response(question: str, response: QAResponse):
     print(f"🧠 REASONING: {response.reasoning}")
     print(f"🔍 FOLLOW-UP: {', '.join(response.follow_up_questions)}")
     if response.sources_needed:
-        print("ℹ️  Note: This answer might benefit from external source verification.")
+        print(
+            "ℹ️  Note: This answer might benefit from "
+            "external source verification."
+        )
     print("-" * 60)
 
 
@@ -133,6 +139,7 @@ def run_standard_demo(bot: SmartQABot):
         res = bot.ask(q)
         display_response(q, res)
 
+
 def run_batch_demo(bot: SmartQABot):
     """Run a batch processing demonstration."""
     print_header("BATCH PROCESSING DEMO")
@@ -144,10 +151,12 @@ def run_batch_demo(bot: SmartQABot):
     for q, r in zip(questions, responses):
         display_response(q, r)
 
+
 def run_error_demo(bot: SmartQABot):
     """Run an error handling demonstration with a simulated issue."""
     print_header("ERROR HANDLING DEMO")
-    # A very long input that might cause issues or just demonstrating the mechanism
+    # A very long input that might cause issues or just demonstrating
+    # the mechanism
     weird_input = "Tell me everything about " + "nothing " * 50
     res = bot.ask(weird_input)
     display_response(weird_input, res)
@@ -158,10 +167,10 @@ def run_error_demo(bot: SmartQABot):
 def main():
     """Main entry point to run all demos."""
     setup_environment()
-    
+
     # Initialize the bot
     bot = SmartQABot()
-    
+
     try:
         run_standard_demo(bot)
         run_batch_demo(bot)
@@ -174,7 +183,7 @@ def main():
         print("✅ Organized class-based bot logic")
         print("✅ Clean formatting and UI helpers")
         print("✅ LangSmith tracing integration")
-        
+
     except KeyboardInterrupt:
         print("\nDemo stopped by user.")
     except Exception as e:
