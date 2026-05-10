@@ -64,7 +64,7 @@ def chroma_basics():
         print(f"Top 2 results for query '{query}':")
         for i, doc in enumerate(results):
             print(
-                f"Result {i+1}: {doc.page_content} (Source: {doc.metadata['source']})"
+                f"Result {i + 1}: {doc.page_content} (Source: {doc.metadata['source']})"
             )
 
 
@@ -83,7 +83,7 @@ def similarity_search_with_scores():
         for i, (doc, score) in enumerate(results_with_scores):
             final_score = 1 / (1 + score)  # Convert distance to similarity
             print(
-                f"Result {i+1}: {doc.page_content} (Score: {final_score:.4f}, Source: {doc.metadata['source']})"
+                f"Result {i + 1}: {doc.page_content} (Score: {final_score:.4f}, Source: {doc.metadata['source']})"
             )
 
 
@@ -101,7 +101,7 @@ def metadata_filtering():
         print(f"Results without metadata filtering for query '{query}':")
         for i, doc in enumerate(results):
             print(
-                f"Result {i+1}: {doc.page_content} (Source: {doc.metadata['source']})"
+                f"Result {i + 1}: {doc.page_content} (Source: {doc.metadata['source']})"
             )
 
         # with metadata filtering
@@ -112,7 +112,7 @@ def metadata_filtering():
         print(f"\nResults with metadata filtering for query '{query}':")
         for i, doc in enumerate(filtered_results):
             print(
-                f"Result {i+1}: {doc.page_content} (Source: {doc.metadata['source']})"
+                f"Result {i + 1}: {doc.page_content} (Source: {doc.metadata['source']})"
             )
 
 
@@ -135,7 +135,7 @@ def as_retriever():
         print("Retriever results:")
         for i, doc in enumerate(docs):
             print(
-                f"Result {i+1}: {doc.page_content} (Source: {doc.metadata['source']})"
+                f"Result {i + 1}: {doc.page_content} (Source: {doc.metadata['source']})"
             )
 
         mmr_retriever = vectorstore.as_retriever(
@@ -146,7 +146,7 @@ def as_retriever():
         print("\nMMR Retriever results:")
         for i, doc in enumerate(mmr_docs):
             print(
-                f"Result {i+1}: {doc.page_content} (Source: {doc.metadata['source']})"
+                f"Result {i + 1}: {doc.page_content} (Source: {doc.metadata['source']})"
             )
 
 
@@ -194,28 +194,34 @@ def exercise_vector_store_setup():
     def create_retriever(
         texts: list[str], chunk_size: int = 500, chunk_overlap: int = 50, k: int = 3
     ):
-
-        # Create documents
+        # Step 1: Wrap each raw string in a Document object.
+        # LangChain components expect Document objects, not plain strings.
         docs = [Document(page_content=t) for t in texts]
 
-        # Split
+        # Step 2: Split documents into smaller chunks.
+        # chunk_size controls max characters per chunk.
+        # chunk_overlap keeps some context between adjacent chunks so
+        # a sentence cut at a boundary isn't lost entirely.
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
         split_docs = splitter.split_documents(docs)
 
-        # Create vector store (in-memory for exercise)
+        # Step 3: Embed each chunk and store in Chroma (in-memory).
+        # from_documents() calls the embedding model once per chunk,
+        # then indexes all vectors so we can search by similarity later.
         vectorstore = Chroma.from_documents(
             documents=split_docs, embedding=embeddings_model
         )
 
-        # Return retriever
+        # Step 4: Wrap the vector store in a Retriever interface.
+        # search_type="similarity" uses cosine similarity to rank results.
+        # k is how many top chunks to return per query.
         return vectorstore.as_retriever(
             search_type="similarity", search_kwargs={"k": k}
         )
 
-    # Test the function
-    # Test
+    # Build a retriever from sample texts and test it with two queries.
     sample_texts = [
         "Python is a versatile programming language used in web development, "
         "data science, machine learning, and automation. It has a simple syntax "
@@ -228,7 +234,7 @@ def exercise_vector_store_setup():
         "and data races at compile time.",
     ]
 
-    retriever = create_retriever(sample_texts, chunk_size=200, chunk_overlap=20, k=2)
+    retriever = create_retriever(sample_texts, chunk_size=200, chunk_overlap=20, k=3)
 
     print("Testing retriever:\n")
     queries = [
@@ -248,5 +254,5 @@ if __name__ == "__main__":
     # similarity_search_with_scores()
     # metadata_filtering()
     # as_retriever()
-    # persist_chroma()
-    exercise_vector_store_setup()
+    persist_chroma()
+    # exercise_vector_store_setup()
