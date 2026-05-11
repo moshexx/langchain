@@ -22,10 +22,15 @@ import logging
 
 load_dotenv()
 
+# ============================================================
+# GLOBAL CONSTANTS
+# ============================================================
+DEFAULT_MODEL = "gpt-4o-mini"
+EMBEDDING_MODEL = "text-embedding-3-small"
+
 # Enable logging to see multi-query generation
 logging.basicConfig(level=logging.INFO, format="%(name)s - %(message)s")
 logging.getLogger("langchain.retrievers.multi_query").setLevel(logging.INFO)
-
 
 INFO_BURIED = [
     Document(
@@ -104,63 +109,35 @@ with cross-region replication. RTO is 4 hours, and RPO is 1 hour.""",
         metadata={"source": "technical_docs_v2.4.pdf"},
     ),
 ]
-# Sample knowledge base for demos
+
 TECH_DOCS = [
     Document(
         page_content="Python is a high-level programming language known for its simplicity and readability. It supports multiple programming paradigms including procedural, object-oriented, and functional programming. Python is widely used in web development, data science, artificial intelligence, and automation.",
-        metadata={
-            "topic": "programming",
-            "language": "python",
-            "difficulty": "beginner",
-        },
+        metadata={"topic": "programming", "language": "python", "difficulty": "beginner"},
     ),
     Document(
         page_content="JavaScript is the language of the web. It runs in browsers and on servers with Node.js. Modern frameworks like React, Vue, and Angular make building interactive web applications efficient. JavaScript supports asynchronous programming with Promises and async/await.",
-        metadata={
-            "topic": "programming",
-            "language": "javascript",
-            "difficulty": "intermediate",
-        },
+        metadata={"topic": "programming", "language": "javascript", "difficulty": "intermediate"},
     ),
     Document(
         page_content="Machine learning is a subset of AI that enables systems to learn from data. Supervised learning uses labeled data, while unsupervised learning finds patterns in unlabeled data. Popular ML frameworks include TensorFlow, PyTorch, and scikit-learn.",
-        metadata={
-            "topic": "ai",
-            "subtopic": "machine_learning",
-            "difficulty": "advanced",
-        },
+        metadata={"topic": "ai", "subtopic": "machine_learning", "difficulty": "advanced"},
     ),
     Document(
         page_content="LangChain is a framework for building LLM applications. It provides tools for prompts, chains, agents, and memory. LangChain supports multiple LLM providers including OpenAI, Anthropic, and local models.",
-        metadata={
-            "topic": "ai",
-            "subtopic": "llm_frameworks",
-            "difficulty": "intermediate",
-        },
+        metadata={"topic": "ai", "subtopic": "llm_frameworks", "difficulty": "intermediate"},
     ),
     Document(
         page_content="LangGraph is a library for building stateful, multi-actor applications with LLMs. Key features include state management, cycles and loops, human-in-the-loop workflows, and persistence. LangGraph extends LangChain for complex agent architectures.",
-        metadata={
-            "topic": "ai",
-            "subtopic": "llm_frameworks",
-            "difficulty": "advanced",
-        },
+        metadata={"topic": "ai", "subtopic": "llm_frameworks", "difficulty": "advanced"},
     ),
     Document(
         page_content="Docker is a platform for containerizing applications. Containers package code and dependencies together for consistent deployment. Docker Compose orchestrates multi-container applications. Kubernetes scales Docker containers in production.",
-        metadata={
-            "topic": "devops",
-            "subtopic": "containers",
-            "difficulty": "intermediate",
-        },
+        metadata={"topic": "devops", "subtopic": "containers", "difficulty": "intermediate"},
     ),
     Document(
         page_content="PostgreSQL is an advanced open-source relational database. It supports JSON data types, full-text search, and extensions like pgvector for vector similarity search. PostgreSQL is ACID compliant and highly extensible.",
-        metadata={
-            "topic": "database",
-            "type": "relational",
-            "difficulty": "intermediate",
-        },
+        metadata={"topic": "database", "type": "relational", "difficulty": "intermediate"},
     ),
     Document(
         page_content="Vector databases like Pinecone, Chroma, and Qdrant are optimized for storing and searching embeddings. They enable semantic similarity search for RAG applications. Most support metadata filtering and hybrid search combining keywords with vectors.",
@@ -169,79 +146,148 @@ TECH_DOCS = [
 ]
 
 
-def create_base_vectorstore():
+# ============================================================
+# CORE LOGIC: Factory Functions
+# ============================================================
+
+def create_base_vectorstore(documents=TECH_DOCS):
     """Create a basic vector store for demos."""
     return Chroma.from_documents(
-        documents=TECH_DOCS,
-        embedding=OpenAIEmbeddings(model="text-embedding-3-small"),
+        documents=documents,
+        embedding=OpenAIEmbeddings(model=EMBEDDING_MODEL),
     )
 
 
-def demo_multi_query_retriever():
-    """Multi-Query Retriever generates multiple query perspectives."""
+def build_multi_query_retriever(vectorstore, model_name: str = DEFAULT_MODEL):
+    """Factory function for MultiQueryRetriever."""
+    llm = ChatOpenAI(model=model_name, temperature=0.3)
+    return MultiQueryRetriever.from_llm(
+        retriever=vectorstore.as_retriever(search_kwargs={"k": 2}), llm=llm
+    )
 
+
+def build_contextual_compression_retriever(vectorstore, model_name: str = DEFAULT_MODEL):
+    """Factory function for ContextualCompressionRetriever."""
+    llm = ChatOpenAI(model=model_name, temperature=0)
+    compressor = LLMChainExtractor.from_llm(llm)
+    return ContextualCompressionRetriever(
+        base_compressor=compressor,
+        base_retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
+    )
+
+
+def build_ensemble_hybrid_retriever(vectorstore, documents, keyword_weight=0.4, semantic_weight=0.6):
+    """Factory function for EnsembleRetriever (Hybrid Search)."""
+    bm25_retriever = BM25Retriever.from_documents(documents)
+    bm25_retriever.k = 3
+    
+    semantic_retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    
+    return EnsembleRetriever(
+        retrievers=[bm25_retriever, semantic_retriever],
+        weights=[keyword_weight, semantic_weight],
+    ), bm25_retriever, semantic_retriever
+
+
+def build_parent_document_retriever():
+    """Factory function for ParentDocumentRetriever."""
+    parent_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+    child_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
+    
+    vectorstore = Chroma(
+        collection_name="parent_child_demo",
+        embedding_function=OpenAIEmbeddings(model=EMBEDDING_MODEL),
+    )
+    store = InMemoryStore()
+    
+    retriever = ParentDocumentRetriever(
+        vectorstore=vectorstore,
+        docstore=store,
+        child_splitter=child_splitter,
+        parent_splitter=parent_splitter,
+    )
+    return retriever, vectorstore
+
+
+def build_advanced_rag_chain(vectorstore, model_name: str = DEFAULT_MODEL):
+    """Complete RAG chain with advanced retrieval."""
+    llm = ChatOpenAI(model=model_name, temperature=0)
+    
+    multi_retriever = MultiQueryRetriever.from_llm(
+        retriever=vectorstore.as_retriever(search_kwargs={"k": 3}), llm=llm
+    )
+    
+    compressor = LLMChainExtractor.from_llm(llm)
+    advanced_retriever = ContextualCompressionRetriever(
+        base_compressor=compressor, base_retriever=multi_retriever
+    )
+    
+    prompt = ChatPromptTemplate.from_template(
+        "Answer the question based on the following context. Be specific and cite which technologies you're referring to.\n\n"
+        "Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"
+    )
+    
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+        
+    return (
+        {"context": advanced_retriever | format_docs, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+
+# ============================================================
+# TEST / SIMULATION
+# ============================================================
+
+def demo_multi_query_retriever():
     print("=" * 60)
     print("MULTI-QUERY RETRIEVER")
     print("Generates multiple perspectives on your question")
     print("=" * 60)
 
+    # 1. Logic Initialization
     vectorstore = create_base_vectorstore()
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+    retriever = build_multi_query_retriever(vectorstore)
 
-    # Create multi-query retriever
-    retriever = MultiQueryRetriever.from_llm(
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 2}), llm=llm
-    )
-
+    # 2. Test Setup & Execution
     query = "What tools can I use to build AI applications?"
 
     print(f"\nOriginal Query: {query}")
     print("\nThe retriever will generate multiple query variations...")
     print("(Check INFO logs above for generated queries)\n")
 
-    # Retrieve documents
     docs = retriever.invoke(query)
 
     print(f"Retrieved {len(docs)} unique documents:")
     for i, doc in enumerate(docs):
-        print(
-            f"\n{i + 1}. [{doc.metadata.get('topic', 'N/A')}] {doc.page_content[:100]}..."
-        )
+        print(f"\n{i + 1}. [{doc.metadata.get('topic', 'N/A')}] {doc.page_content[:100]}...")
 
 
 def demo_contextual_compression():
-    """Contextual Compression extracts only relevant parts."""
-
     print("=" * 60)
     print("CONTEXTUAL COMPRESSION RETRIEVER")
     print("Extracts only query-relevant content from documents")
     print("=" * 60)
 
+    # 1. Logic Initialization
     vectorstore = create_base_vectorstore()
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    compression_retriever = build_contextual_compression_retriever(vectorstore)
 
-    # Create compressor
-    compressor = LLMChainExtractor.from_llm(llm)
-
-    # Wrap retriever with compression
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=compressor,
-        base_retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-    )
-
+    # 2. Test Setup
     query = "What frameworks exist for building LLM applications?"
-
     print(f"\nQuery: {query}")
 
-    # Without compression
+    # 3. Execution (Without compression)
     base_docs = vectorstore.as_retriever(search_kwargs={"k": 2}).invoke(query)
     print(f"\n--- WITHOUT Compression (full chunks) ---")
     for doc in base_docs:
         print(f"Length: {len(doc.page_content)} chars")
         print(f"Content: {doc.page_content[:150]}...\n")
 
-    # With compression
-    # With compression
+    # Execution (With compression)
     compressed_docs = compression_retriever.invoke(query)
     print(f"\n--- WITH Compression (relevant only) ---")
     for doc in compressed_docs:
@@ -250,44 +296,27 @@ def demo_contextual_compression():
 
 
 def demo_ensemble_hybrid_search():
-    """Hybrid search combining keyword (BM25) and semantic search."""
-
     print("=" * 60)
     print("ENSEMBLE/HYBRID RETRIEVER")
     print("Combines keyword (BM25) + semantic search")
     print("=" * 60)
 
+    # 1. Logic Initialization
     vectorstore = create_base_vectorstore()
+    ensemble_retriever, bm25_retriever, semantic_retriever = build_ensemble_hybrid_retriever(vectorstore, TECH_DOCS)
 
-    # BM25 keyword retriever
-    bm25_retriever = BM25Retriever.from_documents(TECH_DOCS)
-    bm25_retriever.k = 3
-
-    # Semantic retriever
-    semantic_retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
-    # Ensemble combines both
-    ensemble_retriever = EnsembleRetriever(
-        retrievers=[bm25_retriever, semantic_retriever],
-        weights=[0.4, 0.6],  # 40% keyword, 60% semantic
-    )
-
-    # Test queries
-    # queries = [
-    #     "PostgreSQL pgvector",  # Keyword-heavy (BM25 helps)
-    #     "What database stores embeddings?",  # Semantic (vectors help)
-    # ]
+    # 2. Test Setup
     queries = [
         "ACID transactions",  # Keyword-heavy (BM25 helps)
         "How do I store AI model outputs for later retrieval?",  # Semantic (vectors help)
         "fast similarity lookup for embeddings",  # Mixed
     ]
 
+    # 3. Execution
     for query in queries:
         print(f"\nQuery: {query}")
         print("-" * 40)
 
-        # Compare results
         bm25_results = bm25_retriever.invoke(query)
         semantic_results = semantic_retriever.invoke(query)
         ensemble_results = ensemble_retriever.invoke(query)
@@ -298,13 +327,15 @@ def demo_ensemble_hybrid_search():
 
 
 def demo_parent_document_retriever():
-    """Parent Document Retriever: small chunks for search, large for context."""
-
     print("=" * 60)
     print("PARENT DOCUMENT RETRIEVER")
     print("Small chunks for precise search, large chunks for context")
     print("=" * 60)
-    # Long document to demonstrate parent/child splitting
+    
+    # 1. Logic Initialization
+    retriever, vectorstore = build_parent_document_retriever()
+    
+    # 2. Test Data
     long_doc = Document(
         page_content="""
 # Complete Guide to Building AI Agents
@@ -342,41 +373,19 @@ LangSmith provides observability for LangChain/LangGraph applications, offering 
         """,
         metadata={"source": "ai_agents_guide.md"},
     )
-
-    # Splitters
-    parent_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-    child_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
-
-    # Storage
-    vectorstore = Chroma(
-        collection_name="parent_child_demo",
-        embedding_function=OpenAIEmbeddings(model="text-embedding-3-small"),
-    )
-    store = InMemoryStore()
-
-    # Create retriever
-    retriever = ParentDocumentRetriever(
-        vectorstore=vectorstore,
-        docstore=store,
-        child_splitter=child_splitter,
-        parent_splitter=parent_splitter,
-    )
-
+    
     # Add document
     retriever.add_documents([long_doc])
 
-    # Search
+    # 3. Execution
     query = "What is LangGraph used for?"
-
     print(f"\nQuery: {query}")
 
-    # Regular retrieval (would get small chunks)
     child_docs = vectorstore.similarity_search(query, k=1)
     print(f"\n--- Child Chunk (what search found) ---")
     print(f"Length: {len(child_docs[0].page_content)} chars")
     print(f"Content: {child_docs[0].page_content}")
 
-    # Parent retrieval (gets full context)
     parent_docs = retriever.invoke(query)
     print("\n--- Parent Chunk (what's returned) ---")
     print(f"Length: {len(parent_docs[0].page_content)} chars")
@@ -384,57 +393,22 @@ LangSmith provides observability for LangChain/LangGraph applications, offering 
 
 
 def demo_advanced_rag_chain():
-    """Complete RAG chain with advanced retrieval."""
-
     print("=" * 60)
     print("COMPLETE ADVANCED RAG CHAIN")
     print("Multi-query + Compression + RAG")
     print("=" * 60)
 
+    # 1. Logic Initialization
     vectorstore = create_base_vectorstore()
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    rag_chain = build_advanced_rag_chain(vectorstore)
 
-    # Multi-query for better recall
-    multi_retriever = MultiQueryRetriever.from_llm(
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 3}), llm=llm
-    )
-
-    # Compression to focus on relevant info
-    compressor = LLMChainExtractor.from_llm(llm)
-    advanced_retriever = ContextualCompressionRetriever(
-        base_compressor=compressor, base_retriever=multi_retriever
-    )
-
-    # RAG prompt
-    prompt = ChatPromptTemplate.from_template(
-        """
-Answer the question based on the following context. Be specific and cite which technologies you're referring to.
-
-Context:
-{context}
-
-Question: {question}
-
-Answer:"""
-    )
-
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
-
-    # Build chain
-    rag_chain = (
-        {"context": advanced_retriever | format_docs, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    # Test
+    # 2. Test Setup
     questions = [
         "What options do I have for building AI agents?",
         "How can I store and search embeddings?",
     ]
 
+    # 3. Execution
     for q in questions:
         print(f"\nQ: {q}")
         answer = rag_chain.invoke(q)

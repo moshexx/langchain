@@ -7,8 +7,9 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from langchain_core.runnables.history import RunnableWithMessageHistory
+
+# from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+# from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.chat_history import (
     InMemoryChatMessageHistory,
     BaseChatMessageHistory,
@@ -17,16 +18,23 @@ from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_classic.retrievers.multi_query import MultiQueryRetriever
-from langchain_classic.retrievers import ContextualCompressionRetriever
-from langchain_classic.retrievers.document_compressors import LLMChainExtractor
+
+# from langchain_classic.retrievers import ContextualCompressionRetriever
+# from langchain_classic.retrievers.document_compressors import LLMChainExtractor
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from datetime import datetime
 from dotenv import load_dotenv
-import json
-
+# import json
 
 load_dotenv()
+
+# ============================================================
+# GLOBAL CONSTANTS
+# ============================================================
+DEFAULT_MODEL = "gpt-4o-mini"
+EMBEDDING_MODEL = "text-embedding-3-small"
+DB_DIR = "./research_db"
 
 
 # ============================================================
@@ -49,21 +57,22 @@ class ResearchResponse(BaseModel):
 # ============================================================
 
 
+# === CORE LOGIC: AI Research Assistant Class ===
 class AIResearchAssistant:
     """AI Research Assistant with document ingestion and retrieval."""
 
     def __init__(
         self,
-        persist_directory: str = "./research_db",
+        persist_directory: str = DB_DIR,
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
     ):
         self.persist_directory = persist_directory
 
         # 1. Embeddings - turns text into vectors
-        self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+        self.embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        self.llm = ChatOpenAI(model=DEFAULT_MODEL, temperature=0)
 
         # 2. Splitter - breaks big docs into chunks
         self.splitter = RecursiveCharacterTextSplitter(
@@ -81,7 +90,7 @@ class AIResearchAssistant:
 
         self.session_store: Dict[str, InMemoryChatMessageHistory] = {}
 
-        print(f"Research Assistant initialized")
+        print("Research Assistant initialized")
         print(f"  Vector store: {persist_directory}")
         print(f"  Documents indexed: {self.vectorstore._collection.count()}")
 
@@ -162,7 +171,7 @@ class AIResearchAssistant:
         formatted = []
         for i, doc in enumerate(docs):
             source = doc.metadata.get("source", "Unknown")
-            formatted.append(f"[Source {i+1}: {source}]\n{doc.page_content}")
+            formatted.append(f"[Source {i + 1}: {source}]\n{doc.page_content}")
         return "\n\n---\n\n".join(formatted)
 
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
@@ -337,7 +346,7 @@ class AIResearchAssistant:
         for i, doc in enumerate(basic_docs):
             source = doc.metadata.get("source", "Unknown")
             basic_total_chars += len(doc.page_content)
-            print(f"\n  Chunk {i+1} [{source}] ({len(doc.page_content)} chars):")
+            print(f"\n  Chunk {i + 1} [{source}] ({len(doc.page_content)} chars):")
             print(f"  {doc.page_content[:150]}...")
 
         print(f"\n  Total text sent to LLM: {basic_total_chars} chars")
@@ -354,7 +363,7 @@ class AIResearchAssistant:
         for i, doc in enumerate(advanced_docs):
             source = doc.metadata.get("source", "Unknown")
             advanced_total_chars += len(doc.page_content)
-            print(f"\n  Chunk {i+1} [{source}] ({len(doc.page_content)} chars):")
+            print(f"\n  Chunk {i + 1} [{source}] ({len(doc.page_content)} chars):")
             print(f"  {doc.page_content[:150]}...")
 
         print(f"\n  Total text sent to LLM: {advanced_total_chars} chars")
@@ -373,6 +382,7 @@ class AIResearchAssistant:
             print(f"  Advanced found more targeted content")
 
 
+# === TEST/SIMULATION HELPER ===
 def print_research_response(question: str, response: ResearchResponse):
     """Pretty print a structured research response."""
 
@@ -391,13 +401,20 @@ def print_research_response(question: str, response: ResearchResponse):
         print(f"    - {fq}")
 
 
-if __name__ == "__main__":
+# === TEST/SIMULATION: Running the Research Assistant ===
+def run_research_assistant_demo():
+    print("=" * 60)
+    print("DEMO: AI Research Assistant (End-to-End System)")
+    print("=" * 60)
+
     import shutil
 
-    shutil.rmtree("./research_db", ignore_errors=True)
-    assistant = AIResearchAssistant()
+    shutil.rmtree(DB_DIR, ignore_errors=True)
 
-    # Add research docs
+    # 1. Logic Initialization
+    assistant = AIResearchAssistant(persist_directory=DB_DIR)
+
+    # 2. Config & Data Setup
     assistant.add_text(
         """
         Attention Mechanisms in Neural Networks
@@ -483,7 +500,6 @@ if __name__ == "__main__":
 
     r = assistant.ask_structured("What is the attention mechanism?", session)
 
-    # This is what your app code looks like
     if r.confidence == "high":
         print(f"\n  Confident answer from: {', '.join(r.sources)}")
     else:
@@ -506,20 +522,20 @@ if __name__ == "__main__":
     print_research_response(q1, r1)
 
     q2 = "How does the second component work?"
-    print(f"\n{'- '*30}")
+    print(f"\n{'- ' * 30}")
     print(f"\nUser: {q2}")
     r2 = assistant.ask_structured(q2, session)
     print_research_response(q2, r2)
 
     q3 = "Connect everything we discussed to LangChain."
-    print(f"\n{'- '*30}")
+    print(f"\n{'- ' * 30}")
     print(f"\nUser: {q3}")
     r3 = assistant.ask_structured(q3, session)
     print_research_response(q3, r3)
 
     # --- Step 4: Final stats ---
     print("\n" + "=" * 60)
-    print("FINAL: What we built across 5 videos")
+    print("FINAL: System Stats")
     print("=" * 60)
 
     history = assistant._get_session_history(session)
@@ -529,15 +545,13 @@ if __name__ == "__main__":
         f"""
   Document ingestion    -> {assistant.get_document_count()} chunks indexed
   Sources tracked       -> {assistant.list_sources()}
-  Basic retrieval       -> similarity search
-  Advanced retrieval    -> multi-query + compression
   Conversation memory   -> {msg_count} messages in session '{session}'
-  Structured output     -> ResearchResponse with {len(ResearchResponse.model_fields)} fields
-
-  From raw text to a production-ready research assistant.
-  That's the full RAG pipeline.
     """
     )
 
     # Cleanup
-    shutil.rmtree("./research_db", ignore_errors=True)
+    shutil.rmtree(DB_DIR, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    run_research_assistant_demo()

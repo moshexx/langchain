@@ -10,126 +10,124 @@ from langchain.chat_models import init_chat_model
 
 load_dotenv()
 
+# ============================================================
+# GLOBAL CONSTANTS
+# ============================================================
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_TEMPERATURE = 0.7
 
-def demo_basic_chain():
-    """Demonstrates a basic chain using LCEL and Runnables."""
 
-    # Component 1: Define the prompt template using LCEL
+# ============================================================
+# CORE LOGIC: Factory Functions
+# ============================================================
+
+def build_basic_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a basic chain using LCEL."""
     prompt = ChatPromptTemplate.from_template(
         "You are a helpful assistant. Answer in one sentence: {question}"
     )
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    model = ChatOpenAI(model=model_name, temperature=DEFAULT_TEMPERATURE)
     parser = StrOutputParser()
-
-    # Compose with pipe operator
-    chain = prompt | model | parser
-
-    # Execute the chain with an input
-    result = chain.invoke({"question": "What is LangChain?"})
-    print(f"Response: {result}")
-
-    return chain
+    return prompt | model | parser
 
 
-def demo_batch_exectution():
-    """Demonstrate batch execution for multiple inputs."""
+def build_translation_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a translation chain."""
     prompt = ChatPromptTemplate.from_template("Translate to French: {text}")
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    model = ChatOpenAI(model=model_name, temperature=DEFAULT_TEMPERATURE)
     parser = StrOutputParser()
+    return prompt | model | parser
 
-    chain = prompt | model | parser
 
-    # Batch - run with multiple inputs
+def build_haiku_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a haiku generation chain."""
+    prompt = ChatPromptTemplate.from_template("Write a haiku about: {topic}")
+    model = ChatOpenAI(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    parser = StrOutputParser()
+    return prompt | model | parser
+
+
+def build_summarization_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a summarization chain."""
+    prompt = ChatPromptTemplate.from_template("Summarize the following text: {text}")
+    model = ChatOpenAI(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    parser = StrOutputParser()
+    return prompt | model | parser
+
+
+def build_marketing_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a marketing tagline generation chain."""
+    prompt = ChatPromptTemplate.from_template(
+        "Create a marketing tagline for a product named '{product}' targeting '{audience}'."
+    )
+    model = ChatOpenAI(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    parser = StrOutputParser()
+    return prompt | model | parser
+
+
+# ============================================================
+# TEST / SIMULATION
+# ============================================================
+
+def run_basic_demo():
+    print("=" * 60)
+    print("BASIC CHAIN DEMO")
+    print("=" * 60)
+    chain = build_basic_chain()
+    result = chain.invoke({"question": "What is LangChain?"})
+    print(f"Response: {result}\n")
+
+
+def run_batch_demo():
+    print("=" * 60)
+    print("BATCH EXECUTION DEMO")
+    print("=" * 60)
+    chain = build_translation_chain()
     inputs = [
         {"text": "Hello, how are you?"},
         {"text": "What is your name?"},
         {"text": "Where is the nearest restaurant?"},
     ]
     results = chain.batch(inputs)
+    for input_data, result in zip(inputs, results):
+        print(f"Input: {input_data['text']} => Output: {result}")
+    print()
 
-    for text in zip(inputs, results):
-        print(f"Input: {text[0]['text']} => Output: {text[1]}")
 
-
-def demo_streaming():
-    """Demonstrate streaming for real-time output."""
-    prompt = ChatPromptTemplate.from_template("Write a haiku about: {topic}")
-    model = ChatOpenAI(
-        model="gpt-4o-mini",
-        temperature=0.7,
-    )
-    parser = StrOutputParser()
-
-    chain = prompt | model | parser
-
-    # Streaming - run with streaming enabled
+def run_streaming_demo():
+    print("=" * 60)
+    print("STREAMING DEMO")
+    print("=" * 60)
+    chain = build_haiku_chain()
     print("Streaming output: ")
     for chunk in chain.stream({"topic": "nature"}):
         print(chunk, end="", flush=True)
-    print()  # for newline after streaming
+    print("\n")
 
 
-def demo_schema_inspection():
-    """Demonstrate input/output schema inspection."""
-    prompt = ChatPromptTemplate.from_template("Summarize the following text: {text}")
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
-    parser = StrOutputParser()
-
-    chain = prompt | model | parser
-
-    # Inspect input and output schemas
+def run_schema_demo():
+    print("=" * 60)
+    print("SCHEMA INSPECTION DEMO")
+    print("=" * 60)
+    chain = build_summarization_chain()
     input_schema = chain.input_schema.model_json_schema()
     output_schema = chain.output_schema.model_json_schema()
+    print(f"Input Schema Variables: {list(input_schema.get('properties', {}).keys())}")
+    print(f"Output Schema: {output_schema.get('type')}\n")
 
-    print(f"Input Schema: {input_schema}")
-    print(f"Output Schema: {output_schema}")
 
-
-# ------- Exercise the demos -------#
-# Exercise: Build your first chain
-def exercise_first_chain():
-    """
-    EXERCISE: Create a chain that:
-    1. Takes a product name and target audience
-    2. Generates a marketing tagline
-    3. Returns just the tagline as a string
-
-    Test with: product="AI Course", audience="developers"
-    """
-
-    # YOUR CODE HERE
-    prompt = ChatPromptTemplate.from_template(
-        "Create a marketing tagline for a product named '{product}' targeting '{audience}'."
-    )
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
-    parser = StrOutputParser()
-
-    chain = prompt | model | parser
-
-    # Test the chain
+def run_marketing_exercise():
+    print("=" * 60)
+    print("EXERCISE: MARKETING TAGLINE")
+    print("=" * 60)
+    chain = build_marketing_chain()
     result = chain.invoke({"product": "AI agents for sales", "audience": "sales teams"})
-    print(f"Marketing Tagline: {result}")
-
-
-def new_way():
-    # the univeral way to initialize a model
-    model = init_chat_model("gpt-4o-mini", temperature=0.7, max_tokens=1500)
-
-    # Or provider-specific (still works)
-
-    from langchain_openai import ChatOpenAI
-    from langchain_anthropic import ChatAnthropic
-
-    openai_model = ChatOpenAI(
-        model="gpt-4o-mini", temperature=0.7, max_tokens=1500, timeout=30, max_retries=3
-    )
-
-    anthropic_model = ChatAnthropic(model="claude-sonnet-4-5-20250929")
+    print(f"Marketing Tagline: {result}\n")
 
 
 if __name__ == "__main__":
-    # demo_basic_chain()
-    # demo_batch_exectution()
-    # demo_streaming()
-    # demo_schema_inspection()
-    exercise_first_chain()
+    # run_basic_demo()
+    # run_batch_demo()
+    # run_streaming_demo()
+    # run_schema_demo()
+    run_marketing_exercise()

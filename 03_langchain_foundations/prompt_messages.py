@@ -1,95 +1,56 @@
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-
-# import os
-# from langchain_core.output_parsers import StrOutputParser
-# from langchain.chat_models import init_chat_model
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    FewShotChatMessagePromptTemplate,
+)
 from langchain_core.messages import (
     HumanMessage,
-    SystemMessage,
     AIMessage,
+    SystemMessage,
     ChatMessage,
     ToolMessage,
 )
-from langchain_core.prompts import FewShotChatMessagePromptTemplate
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
+from langchain.chat_models import init_chat_model
 
 load_dotenv()
 
-
-def demo_chat_prompt_template() -> None:
-    """Demonstrates basic ChatPromptTemplate usage."""
-    # Basic template
-    prompt = ChatPromptTemplate.from_template(
-        "Tell me a {adjective} joke about {topic}."
-    )
-
-    # Format and inspect
-    messages = prompt.format_messages(adjective="funny", topic="chickens")
-    print("Basic Template Output:")
-    print(messages)
-    print()
+# ============================================================
+# GLOBAL CONSTANTS
+# ============================================================
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_TEMPERATURE = 0
 
 
-def demo_multi_message_templates():
-    """Demonstrates multi-message templates with system and human roles."""
-    prompt = ChatPromptTemplate.from_messages(
+# ============================================================
+# CORE LOGIC: Factory Functions
+# ============================================================
+
+def build_joke_prompt():
+    """Returns a basic chat prompt template for jokes."""
+    return ChatPromptTemplate.from_template("Tell me a {adjective} joke about {topic}.")
+
+
+def build_translation_prompt():
+    """Returns a multi-message prompt template for translation."""
+    return ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                "You are a helpful assistant that translates {input_language} to {output_language}.",
-            ),
+            ("system", "You are a helpful assistant that translates {input_language} to {output_language}."),
             ("human", "Translate the following text: {text}"),
         ]
     )
 
-    messages = prompt.format_messages(
-        input_language="English", output_language="French", text="I love programming."
-    )
-    print("Multi-Message Template Output:")
-    print(messages)
 
-    # model = init_chat_model(model="gpt-4o-mini", temperature=0)
-    # response = model.invoke(messages)
-    # print(response.content)
-    print()
-
-
-def demo_message_types():
-    """Demonstrates the different message types available in LangChain."""
-    messages = [
-        HumanMessage(content="Hello!"),
-        AIMessage(content="Hi there! How can I assist you today?"),
-        SystemMessage(content="This is a system message."),
-        ToolMessage(content="Tool executed successfully.", tool_call_id="call_123"),
-        ChatMessage(content="This is a general chat message.", role="user"),
-    ]
-    print("Message Types Output:")
-    for msg in messages:
-        print(type(msg).__name__, "-", msg.content)
-    print()
-
-
-def demo_few_shot_prompting():
-    """Demonstrates FewShotChatMessagePromptTemplate for providing examples to the LLM."""
+def build_few_shot_prompt():
+    """Returns a few-shot chat prompt template."""
     examples = [
         {"input": "happy", "output": "sad"},
         {"input": "tall", "output": "short"},
     ]
-
-    example_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("human", "{input}"),
-            ("ai", "{output}"),
-        ]
-    )
-
-    fewshot_prompt = FewShotChatMessagePromptTemplate(
-        example_prompt=example_prompt,
-        examples=examples,
-    )
-
-    final_prompt = ChatPromptTemplate.from_messages(
+    example_prompt = ChatPromptTemplate.from_messages([("human", "{input}"), ("ai", "{output}")])
+    fewshot_prompt = FewShotChatMessagePromptTemplate(example_prompt=example_prompt, examples=examples)
+    return ChatPromptTemplate.from_messages(
         [
             ("system", "Give the opposite of each word."),
             fewshot_prompt,
@@ -97,32 +58,73 @@ def demo_few_shot_prompting():
         ]
     )
 
-    print("Few-Shot Final Prompt Configuration:")
-    print(final_prompt.format_messages(input="happy"))
 
-    # model = init_chat_model(model="gpt-4o-mini", temperature=0)
-    # response = model.invoke(final_prompt.format_messages(input="happy"))
-    # print(response.content)
-    print()
-
-
-def demo_reusable_components():
-    """Demonstrates combining prompt templates."""
+def build_combined_prompt():
+    """Returns a combined chat prompt template."""
     system_prompt = ChatPromptTemplate.from_messages([("system", "You are a {role}.")])
     user_prompt = ChatPromptTemplate.from_messages([("human", "{question}")])
+    return system_prompt + user_prompt
 
-    # Combine prompts
-    full_prompt = system_prompt + user_prompt
 
-    fin = full_prompt.format_messages(role="helpful assistant", question="What is AI?")
-    print("Combined Prompts Output:")
-    print(fin)
+# ============================================================
+# TEST / SIMULATION
+# ============================================================
+
+def run_chat_prompt_demo():
+    print("=" * 60)
+    print("CHAT PROMPT TEMPLATE DEMO")
+    print("=" * 60)
+    prompt = build_joke_prompt()
+    messages = prompt.format_messages(adjective="funny", topic="chickens")
+    print(f"Formatted Messages:\n{messages}\n")
+
+
+def run_multi_message_demo():
+    print("=" * 60)
+    print("MULTI-MESSAGE TEMPLATE DEMO")
+    print("=" * 60)
+    prompt = build_translation_prompt()
+    messages = prompt.format_messages(input_language="English", output_language="French", text="I love programming.")
+    print(f"Formatted Messages:\n{messages}\n")
+
+
+def run_message_types_demo():
+    print("=" * 60)
+    print("MESSAGE TYPES DEMO")
+    print("=" * 60)
+    messages = [
+        HumanMessage(content="Hello!"),
+        AIMessage(content="Hi there!"),
+        SystemMessage(content="This is a system message."),
+        ToolMessage(content="Tool executed.", tool_call_id="call_123"),
+        ChatMessage(content="General message.", role="user"),
+    ]
+    for msg in messages:
+        print(f"{type(msg).__name__}: {msg.content}")
     print()
+
+
+def run_few_shot_demo():
+    print("=" * 60)
+    print("FEW-SHOT PROMPTING DEMO")
+    print("=" * 60)
+    prompt = build_few_shot_prompt()
+    messages = prompt.format_messages(input="fast")
+    print(f"Formatted Messages:\n{messages}\n")
+
+
+def run_reusable_demo():
+    print("=" * 60)
+    print("REUSABLE/COMBINED COMPONENTS DEMO")
+    print("=" * 60)
+    prompt = build_combined_prompt()
+    messages = prompt.format_messages(role="math expert", question="What is 2+2?")
+    print(f"Formatted Messages:\n{messages}\n")
 
 
 if __name__ == "__main__":
-    demo_chat_prompt_template()
-    demo_multi_message_templates()
-    demo_message_types()
-    demo_few_shot_prompting()
-    demo_reusable_components()
+    run_chat_prompt_demo()
+    run_multi_message_demo()
+    run_message_types_demo()
+    run_few_shot_demo()
+    run_reusable_demo()

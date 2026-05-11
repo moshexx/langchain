@@ -1,0 +1,13 @@
+# LangChain Course Structure Guidelines
+
+When adding a new chapter/module to this repository, follow these strict guidelines to maintain the learning structure and visual consistency:
+
+1. **Folder Naming**: Prefix the folder with the next available number (e.g., `08_new_topic`).
+2. **File Naming**: Prefix all Python files within the folder with numbers to dictate the learning path (e.g., `01_basics.py`, `02_advanced.py`).
+3. **Code Structure**: Code within files should be organized into clean, runnable functions (e.g., `def demo_concept():`) rather than loose scripts.
+4. **Module Documentation**: Each folder MUST contain a `README.md` that:
+   - Explains the core concepts.
+   - Includes a **Mermaid.js flowchart** or architectural diagram visualizing the concept.
+5. **Global Updates**: When a new module is added, you MUST update the root `README.md`:
+   - Add the new step to the Mermaid flowchart (`The Course Architecture`).
+   - Add a brief description of the new module in the text sections, linking to the new folder.

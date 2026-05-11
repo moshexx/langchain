@@ -3,22 +3,27 @@ Building RAG Pipelines
 Complete retrieval-augmented generation implementation
 """
 
+import tempfile
+from typing import List
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain.chat_models import init_chat_model
-
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field
-from typing import List
-from dotenv import load_dotenv
-import tempfile
 
 load_dotenv()
-embeddings_model = OpenAIEmbeddings(model="text-embedding-3-small")
+
+# ============================================================
+# GLOBAL CONSTANTS
+# ============================================================
+DEFAULT_MODEL = "gpt-4o-mini"
+EMBEDDING_MODEL = "text-embedding-3-small"
 
 # Sample knowledge base
 KNOWLEDGE_BASE = """# LangChain Framework
@@ -58,37 +63,33 @@ platform) has a free tier and paid plans starting at $39/month.
 Install with: pip install langchain langchain-openai
 Create your first chain in under 10 lines of code.
 """
-llm = init_chat_model(model="gpt-4o-mini", temperature=0.2)
 
 
-def create_kb():
-    """Create a vector store from knowledge base."""
+# ============================================================
+# CORE LOGIC: Factory Functions & Classes
+# ============================================================
 
-    # split the knowledge base into chunks
+def create_kb_vectorstore(text: str = KNOWLEDGE_BASE, source_name: str = "langchain_knowledge_base.md"):
+    """Create a vector store from text content."""
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     doc = Document(
-        page_content=KNOWLEDGE_BASE, metadata={"source": "langchain_knowledge_base.md"}
+        page_content=text, metadata={"source": source_name}
     )
-
     chunks = splitter.split_documents([doc])
 
-    # create a vector store from the chunks
-    vector_store = Chroma.from_documents(
+    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+    return Chroma.from_documents(
         documents=chunks,
-        embedding=embeddings_model,
+        embedding=embeddings,
         persist_directory=tempfile.mkdtemp(),
     )
-    return vector_store
 
 
-def demo_basic_rag():
+def build_basic_rag_chain(vectorstore, model_name: str = DEFAULT_MODEL):
+    """Builds a basic RAG chain."""
+    llm = init_chat_model(model=model_name, temperature=0.2)
+    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 2})
 
-    vector_store = create_kb()
-    retriever = vector_store.as_retriever(
-        search_type="similarity", search_kwargs={"k": 2}
-    )
-
-    # RAG Prompt Template
     prompt = ChatPromptTemplate.from_template(
         """
 Answer the question based only on the following context:
@@ -103,36 +104,20 @@ Make sure to answer in a concise manner, and if you don't know the answer,
 just say "I don't know." """
     )
 
-    # Format retrieved docs
     def format_docs(docs):
         return "\n\n".join([doc.page_content for doc in docs])
 
-    # Rag chain
-    rag_chain = (
+    return (
         {"context": retriever | format_docs, "question": RunnablePassthrough()}
         | prompt
         | llm
         | StrOutputParser()
     )
 
-    # Test the RAG chain
-    # Test
-    questions = [
-        "What is LangChain?",
-        "Who created LangChain?",
-        "What is LangGraph used for?",
-    ]
 
-    print("Basic RAG Demo:\n")
-    for q in questions:
-        answer = rag_chain.invoke(q)
-        print(f"Q: {q}")
-        print(f"A: {answer}\n")
-
-
-def demo_rag_with_sources():
-
-    vectorstore = create_kb()
+def build_rag_with_sources_chain(vectorstore, model_name: str = DEFAULT_MODEL):
+    """Builds a RAG chain that explicitly cites sources."""
+    llm = init_chat_model(model=model_name, temperature=0.2)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     prompt = ChatPromptTemplate.from_template(
@@ -155,25 +140,17 @@ def demo_rag_with_sources():
             formatted.append(f"[{i + 1}] {source}:\n{doc.page_content}")
         return "\n\n".join(formatted)
 
-    rag_chain = (
-        {
-            "context": retriever | format_docs_with_sources,
-            "question": RunnablePassthrough(),
-        }
+    return (
+        {"context": retriever | format_docs_with_sources, "question": RunnablePassthrough()}
         | prompt
         | llm
         | StrOutputParser()
     )
 
-    print("RAG with Sources:\n")
-    answer = rag_chain.invoke("What are the core components of LangChain?")
-    print("Q: What are the core components?\n")
-    print(f"A: {answer}")
 
-
-def demo_rag_with_fallback():
-
-    vectorstore = create_kb()
+def build_rag_with_fallback_chain(vectorstore, model_name: str = DEFAULT_MODEL):
+    """Builds a RAG chain with strict fallback instructions when data is missing."""
+    llm = init_chat_model(model=model_name, temperature=0.2)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
 
     prompt = ChatPromptTemplate.from_template(
@@ -190,22 +167,109 @@ Question: {question}
 Answer:"""
     )
 
-    def format_docs(docs):
-        # הדפסת המסמכים לקונסול כדי להבין מה נשלף לפני שהמודל רואה אותם
+    def format_docs_debug(docs):
         print(f"\n[Debug] Retrieved {len(docs)} documents from Vector DB:")
         for i, doc in enumerate(docs):
             print(f"  - Doc {i + 1}: {doc.page_content[:150]}...")
         print("[Debug] End of context\n")
         return "\n\n".join(doc.page_content for doc in docs)
 
-    rag_chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    return (
+        {"context": retriever | format_docs_debug, "question": RunnablePassthrough()}
         | prompt
         | llm
         | StrOutputParser()
     )
 
-    print("RAG with Fallback:\n")
+
+class RAGResponse(BaseModel):
+    """Structured schema for RAG response."""
+    answer: str = Field(description="The answer to the question")
+    confidence: str = Field(description="high, medium, or low")
+    sources_used: List[str] = Field(description="List of sources referenced")
+    follow_up: str = Field(description="Suggested follow-up question")
+
+
+class DocumentQA:
+    """Object-Oriented Document Q&A System with structured output."""
+    def __init__(self, document: str, source_name: str = "document", model_name: str = DEFAULT_MODEL):
+        self.vectorstore = create_kb_vectorstore(document, source_name)
+        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
+        self.llm = init_chat_model(model=model_name, temperature=0.2)
+        
+        self.structured_llm = self.llm.with_structured_output(RAGResponse)
+
+        self.prompt = ChatPromptTemplate.from_template(
+            """
+Based on the context below, answer the question. Rate your confidence.
+
+Context:
+{context}
+
+Question: {question}
+
+Provide a structured response."""
+        )
+
+    def _format_docs(self, docs):
+        return "\n\n".join(
+            f"[{doc.metadata.get('source', 'unknown')}]: {doc.page_content}"
+            for doc in docs
+        )
+
+    def ask(self, question: str) -> RAGResponse:
+        chain = (
+            {"context": self.retriever | self._format_docs, "question": RunnablePassthrough()}
+            | self.prompt
+            | self.structured_llm
+        )
+        return chain.invoke(question)
+
+
+# ============================================================
+# TEST / SIMULATION
+# ============================================================
+
+def demo_basic_rag():
+    print("=" * 60)
+    print("BASIC RAG DEMO")
+    print("=" * 60)
+
+    vector_store = create_kb_vectorstore()
+    rag_chain = build_basic_rag_chain(vector_store)
+
+    questions = [
+        "What is LangChain?",
+        "Who created LangChain?",
+        "What is LangGraph used for?",
+    ]
+
+    for q in questions:
+        answer = rag_chain.invoke(q)
+        print(f"Q: {q}")
+        print(f"A: {answer}\n")
+
+
+def demo_rag_with_sources():
+    print("=" * 60)
+    print("RAG WITH SOURCES")
+    print("=" * 60)
+
+    vectorstore = create_kb_vectorstore()
+    rag_chain = build_rag_with_sources_chain(vectorstore)
+
+    answer = rag_chain.invoke("What are the core components of LangChain?")
+    print("Q: What are the core components?\n")
+    print(f"A: {answer}")
+
+
+def demo_rag_with_fallback():
+    print("=" * 60)
+    print("RAG WITH FALLBACK")
+    print("=" * 60)
+
+    vectorstore = create_kb_vectorstore()
+    rag_chain = build_rag_with_fallback_chain(vectorstore)
 
     questions = [
         "What is the pricing for LangSmith?",  # In knowledge base
@@ -220,46 +284,14 @@ Answer:"""
 
 
 def demo_structured_rag():
-    """RAG with structured output."""
+    print("=" * 60)
+    print("STRUCTURED RAG (Pydantic Output)")
+    print("=" * 60)
 
-    vectorstore = create_kb()
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
-    class RAGResponse(BaseModel):
-        """Structured RAG response."""
-
-        answer: str = Field(description="The answer to the question")
-        confidence: str = Field(description="high, medium, or low")
-        sources_used: List[str] = Field(description="List of sources referenced")
-        follow_up: str = Field(description="Suggested follow-up question")
-
-    structured_llm_parser = llm.with_structured_output(RAGResponse)
-
-    prompt = ChatPromptTemplate.from_template(
-        """
-Based on the context below, answer the question.
-
-Context:
-{context}
-
-Question: {question}
-
-Provide a structured response."""
-    )
-
-    def format_docs(docs):
-        return "\n\n".join(
-            f"[{doc.metadata.get('source', 'unknown')}]: {doc.page_content}"
-            for doc in docs
-        )
-
-    rag_chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
-        | prompt
-        | structured_llm_parser
-    )
-    print("Structured RAG Demo:\n")
-    result = rag_chain.invoke("What is LangGraph?")
+    # Use the OOP DocumentQA class which supports structured output natively
+    qa_system = DocumentQA(KNOWLEDGE_BASE, "langchain_knowledge_base.md")
+    
+    result = qa_system.ask("What is LangGraph?")
 
     print(f"Answer: {result.answer}")
     print(f"Confidence: {result.confidence}")
@@ -267,114 +299,11 @@ Provide a structured response."""
     print(f"Follow-up: {result.follow_up}")
 
 
-def exercise_document_qa_moshe():
-    """
-    EXERCISE: Build a complete document Q&A system that:
-    1. Takes a text document as input
-    2. Splits and embeds it
-    3. Allows multiple questions
-    4. Returns answers with confidence scores
-    """
-    vector_store = create_kb()
-    retriever = vector_store.as_retriever(search_kwargs={"k": 2})
-
-    prompt = ChatPromptTemplate.from_template(
-        """
-Answer based on the context. Rate your confidence (high/medium/low).
-
-Context:
-{context}
-
-Question: {question}
-
-Provide a structured response."""
-    )
-
-    def format_docs(docs):
-        formatted = []
-        for i, doc in enumerate(docs):
-            source = doc.metadata.get("source", "unknown")
-            formatted.append(f"[{i + 1}] {source}:\n{doc.page_content}")
-        return "\n\n".join(formatted)
-
-    class RAGResponse(BaseModel):
-        """Structured RAG response."""
-
-        answer: str = Field(description="The answer to the question")
-        confidence: str = Field(description="high, medium, or low")
-        sources_used: List[str] = Field(description="List of sources referenced")
-        follow_up: str = Field(description="Suggested follow-up question")
-
-    structured_llm = llm.with_structured_output(RAGResponse)
-
-    rag_chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
-        | prompt
-        | structured_llm_parser
-    )
-    print("Structured RAG Demo:\n")
-    result = rag_chain.invoke("What is LangGraph?")
-
-    print(f"Answer: {result.answer}")
-    print(f"Confidence: {result.confidence}")
-    print(f"Sources: {result.sources_used}")
-    print(f"Follow-up: {result.follow_up}")
-
-
-# Exercise: Build a document Q&A system
 def exercise_document_qa():
-    """
-    EXERCISE: Build a complete document Q&A system that:
-    1. Takes a text document as input
-    2. Splits and embeds it
-    3. Allows multiple questions
-    4. Returns answers with confidence scores
-    """
+    print("=" * 60)
+    print("EXERCISE: Document QA System")
+    print("=" * 60)
 
-    class DocumentQA:
-        def __init__(self, document: str, source_name: str = "document"):
-            # Split document
-            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-            doc = Document(page_content=document, metadata={"source": source_name})
-            chunks = splitter.split_documents([doc])
-
-            # Create vector store
-            self.vectorstore = Chroma.from_documents(
-                documents=chunks,
-                embedding=OpenAIEmbeddings(model="text-embedding-3-small"),
-            )
-            self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
-
-            # Create chain
-            self.llm = init_chat_model(model="gpt-4o-mini", temperature=0.2)
-
-            self.prompt = ChatPromptTemplate.from_template(
-                """
-Answer based on the context. Rate your confidence (high/medium/low).
-
-Context: {context}
-Question: {question}
-
-Format: [Confidence: X] Answer"""
-            )
-
-            def format_docs(docs):
-                return "\n".join(d.page_content for d in docs)
-
-            self.chain = (
-                {
-                    "context": self.retriever | format_docs,
-                    "question": RunnablePassthrough(),
-                }
-                | self.prompt
-                | self.llm
-                | StrOutputParser()
-            )
-
-        def ask(self, question: str) -> str:
-            return self.chain.invoke(question)
-
-    # Test
     test_doc = """
     The Python programming language was created by Guido van Rossum.
     First released in 1991, Python emphasizes code readability.
@@ -384,7 +313,6 @@ Format: [Confidence: X] Answer"""
 
     qa = DocumentQA(test_doc, "python_facts")
 
-    print("Document Q&A System:\n")
     questions = [
         "Who created Python?",
         "When was Python 3.12 released?",
@@ -392,9 +320,9 @@ Format: [Confidence: X] Answer"""
     ]
 
     for q in questions:
-        answer = qa.ask(q)
+        result = qa.ask(q)
         print(f"Q: {q}")
-        print(f"A: {answer}\n")
+        print(f"A: {result.answer} [Confidence: {result.confidence}]\n")
 
 
 if __name__ == "__main__":
@@ -402,5 +330,4 @@ if __name__ == "__main__":
     # demo_rag_with_sources()
     # demo_rag_with_fallback()
     # demo_structured_rag()
-    # exercise_document_qa_moshe()
     exercise_document_qa()

@@ -5,6 +5,15 @@
 
 ## How it works
 
+```mermaid
+flowchart TD
+    A([Document]) --> B[Split into Sentences]
+    B --> C[Generate Sentence Embeddings]
+    C --> D[Calculate Similarity between Sentences]
+    D --> E[Cluster Similar Sentences]
+    E --> F([Semantic Chunks])
+```
+
 The `SemanticChunker` processes a document with mixed topics through the following steps:
 
 1. **Embed sentences:** Converts each sentence into a vector embedding.

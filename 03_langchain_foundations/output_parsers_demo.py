@@ -1,51 +1,23 @@
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    FewShotChatMessagePromptTemplate,
-    MessagesPlaceholder,
-)
-from langchain_core.messages import (
-    SystemMessage,
-    HumanMessage,
-    AIMessage,
-)
-from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
-from langchain_core.output_parsers import StrOutputParser
+from typing import List
+from pydantic import BaseModel, Field
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser, JsonOutputParser, PydanticOutputParser
 from langchain.chat_models import init_chat_model
 
 load_dotenv()
 
-parser = StrOutputParser()
-
-prompt = ChatPromptTemplate.from_template("wire a short poem about {topic}")
-
-llm = init_chat_model(model="gpt-4o-mini", temperature=0)
-
-chain = prompt | llm | parser
-
-response = chain.invoke({"topic": "nature"})
-
-print(type(response))
+# ============================================================
+# GLOBAL CONSTANTS
+# ============================================================
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_TEMPERATURE = 0
 
 
-# JsonOutputParser example
-from langchain_core.output_parsers import JsonOutputParser
-
-parser = JsonOutputParser()
-
-prompt = ChatPromptTemplate.from_template(
-    "Return a JSON object with 'name' and 'age' for: {description}"
-)
-
-chain = prompt | llm | parser
-
-result = chain.invoke({"description": "A 25-year-old developer named Alex"})
-print(result)  # {'name': 'Alex', 'age': 25}
-
-# PydanticOutputParser example
-from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
-
+# ============================================================
+# CORE LOGIC: Data Models & Factory Functions
+# ============================================================
 
 class Person(BaseModel):
     name: str = Field(description="The person's name")
@@ -53,25 +25,92 @@ class Person(BaseModel):
     occupation: str = Field(description="The person's occupation")
 
 
-parser = PydanticOutputParser(pydantic_object=Person)
-
-prompt = ChatPromptTemplate.from_template(
-    "Return a JSON object with 'name', 'age', and 'occupation' for: {description}"
-).partial(format_instructions=parser.get_format_instructions())
-chain = prompt | llm | parser
-result = chain.invoke({"description": "A 30-year-old artist named Maria"})
-print(result)  # Person(name='Maria', age=30, occupation='artist')
-
-
-# Structured Output
 class MovieReview(BaseModel):
     title: str = Field(description="The title of the movie")
     review: str = Field(description="A brief review of the movie")
     rating: int = Field(description="The rating of the movie out of 10")
 
 
-# Bind the schema to the model
-structured_model = llm.with_structured_output(MovieReview)
+def build_string_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a chain that outputs a simple string."""
+    prompt = ChatPromptTemplate.from_template("Write a short poem about {topic}")
+    llm = init_chat_model(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    parser = StrOutputParser()
+    return prompt | llm | parser
 
-result = structured_model.invoke("Review: Inception is a mind-bending thriller. 9/10")
-print(result)  # MovieReview(title='Inception', review='A mind-bending thriller.', rating=9)
+
+def build_json_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a chain that outputs a JSON object."""
+    prompt = ChatPromptTemplate.from_template(
+        "Return a JSON object with 'name' and 'age' for: {description}"
+    )
+    llm = init_chat_model(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    parser = JsonOutputParser()
+    return prompt | llm | parser
+
+
+def build_pydantic_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a chain that outputs a Pydantic object using PydanticOutputParser."""
+    parser = PydanticOutputParser(pydantic_object=Person)
+    prompt = ChatPromptTemplate.from_template(
+        "Return a JSON object with 'name', 'age', and 'occupation' for: {description}\n{format_instructions}"
+    ).partial(format_instructions=parser.get_format_instructions())
+    llm = init_chat_model(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    return prompt | llm | parser
+
+
+def build_structured_movie_chain(model_name: str = DEFAULT_MODEL):
+    """Builds a chain that uses .with_structured_output() for a MovieReview."""
+    llm = init_chat_model(model=model_name, temperature=DEFAULT_TEMPERATURE)
+    return llm.with_structured_output(MovieReview)
+
+
+# ============================================================
+# TEST / SIMULATION
+# ============================================================
+
+def run_string_demo():
+    print("=" * 60)
+    print("STRING OUTPUT PARSER DEMO")
+    print("=" * 60)
+    chain = build_string_chain()
+    response = chain.invoke({"topic": "nature"})
+    print(f"Type: {type(response)}")
+    print(f"Response: {response}\n")
+
+
+def run_json_demo():
+    print("=" * 60)
+    print("JSON OUTPUT PARSER DEMO")
+    print("=" * 60)
+    chain = build_json_chain()
+    result = chain.invoke({"description": "A 25-year-old developer named Alex"})
+    print(f"Type: {type(result)}")
+    print(f"Result: {result}\n")
+
+
+def run_pydantic_demo():
+    print("=" * 60)
+    print("PYDANTIC OUTPUT PARSER DEMO")
+    print("=" * 60)
+    chain = build_pydantic_chain()
+    result = chain.invoke({"description": "A 30-year-old artist named Maria"})
+    print(f"Type: {type(result)}")
+    print(f"Result: {result}\n")
+
+
+def run_structured_output_demo():
+    print("=" * 60)
+    print("STRUCTURED OUTPUT DEMO (.with_structured_output)")
+    print("=" * 60)
+    chain = build_structured_movie_chain()
+    result = chain.invoke("Review: Inception is a mind-bending thriller. 9/10")
+    print(f"Type: {type(result)}")
+    print(f"Result: {result}\n")
+
+
+if __name__ == "__main__":
+    run_string_demo()
+    run_json_demo()
+    run_pydantic_demo()
+    run_structured_output_demo()
