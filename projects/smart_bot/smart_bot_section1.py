@@ -16,14 +16,15 @@ from langchain_openai import ChatOpenAI
 
 # --- 1. Configuration & Setup ---
 
+
 def setup_environment():
     """Initialize environment variables and LangSmith tracing."""
     load_dotenv()
 
     if os.getenv("LANGCHAIN_API_KEY"):
-        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
         os.environ.setdefault("LANGCHAIN_PROJECT", "Smart Q&A Bot Project")
-        project_name = os.environ.get('LANGCHAIN_PROJECT')
+        project_name = os.environ.get("LANGCHAIN_PROJECT")
         print(f"🚀 LangSmith configured - Project: {project_name}")
     else:
         print("⚠️ LangSmith API Key not found. Tracing is disabled.")
@@ -31,8 +32,10 @@ def setup_environment():
 
 # --- 2. Schema Definitions ---
 
+
 class QAResponse(BaseModel):
     """Structured output format for the bot's responses."""
+
     answer: str = Field(description="The final answer to the user's question.")
     confidence: str = Field(description="Confidence level: high, medium, or low.")
     reasoning: str = Field(description="The step-by-step reasoning behind the answer.")
@@ -48,6 +51,7 @@ class QAResponse(BaseModel):
 
 # --- 3. Core Bot Implementation ---
 
+
 class SmartQABot:
     """A bot that provides structured, traceable, and reliable answers."""
 
@@ -62,17 +66,22 @@ class SmartQABot:
 
     def _create_prompt_template(self) -> ChatPromptTemplate:
         """Define the system instructions and message structure."""
-        return ChatPromptTemplate.from_messages([
-            ("system", """You are a highly capable and honest Q&A assistant.
+        return ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """You are a highly capable and honest Q&A assistant.
 
 Your guidelines:
 - Provide accurate and concise answers.
 - Be transparent about uncertainty; set confidence to 'low' if you aren't sure.
 - Explain your reasoning clearly.
 - Suggest 2-3 logical follow-up questions.
-- Flag if external information (sources) would be beneficial."""),
-            ("human", "{question}"),
-        ])
+- Flag if external information (sources) would be beneficial.""",
+                ),
+                ("human", "{question}"),
+            ]
+        )
 
     @traceable(name="ask_single_question")
     def ask(self, question: str) -> QAResponse:
@@ -95,11 +104,12 @@ Your guidelines:
             confidence="low",
             reasoning=f"Error details: {str(error)}",
             follow_up_questions=["Would you like to try rephrasing the question?"],
-            sources_needed=True
+            sources_needed=True,
         )
 
 
 # --- 4. UI & Formatting Helpers ---
+
 
 def print_separator(char: str = "=", length: int = 60):
     print(char * length)
@@ -119,14 +129,12 @@ def display_response(question: str, response: QAResponse):
     print(f"🧠 REASONING: {response.reasoning}")
     print(f"🔍 FOLLOW-UP: {', '.join(response.follow_up_questions)}")
     if response.sources_needed:
-        print(
-            "ℹ️  Note: This answer might benefit from "
-            "external source verification."
-        )
+        print("ℹ️  Note: This answer might benefit from external source verification.")
     print("-" * 60)
 
 
 # --- 5. Demo Scenarios ---
+
 
 def run_standard_demo(bot: SmartQABot):
     """Run a basic Q&A demonstration."""
@@ -164,6 +172,7 @@ def run_error_demo(bot: SmartQABot):
 
 # --- 6. Main Execution ---
 
+
 def main():
     """Main entry point to run all demos."""
     setup_environment()
@@ -175,7 +184,7 @@ def main():
         run_standard_demo(bot)
         run_batch_demo(bot)
         run_error_demo(bot)
-        
+
         print_header("SECTION 1 COMPLETE")
         print("\nLearning Points:")
         print("✅ Modularized setup and configuration")
@@ -192,6 +201,7 @@ def main():
         # Optional: ensure traces are flushed if using high volume
         # Client().flush()
         pass
+
 
 if __name__ == "__main__":
     main()

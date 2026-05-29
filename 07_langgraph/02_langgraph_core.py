@@ -1,6 +1,32 @@
 """
-LangGraph Core Concepts
-StateGraph, nodes, edges, and basic patterns
+LangGraph Core Concepts & API Reference
+========================================
+
+This file demonstrates the fundamental concepts and APIs of LangGraph:
+
+1. StateGraph:
+   - The primary class used to define stateful multi-agent and LLM workflows.
+   - Initialized with a state schema (usually a TypedDict) that defines the shape and types of the shared memory (State) passed between nodes.
+
+2. START & END:
+   - START: A special control node representing the entry point of the graph. It tells the execution engine where to start (e.g., `builder.add_edge(START, "node_name")`).
+   - END: A special control node representing the termination point of the graph. When execution flows into END, the graph execution halts.
+
+3. Reducer Functions (State Aggregation):
+   - By default, returning a key from a node overwrites that key in the State. Reducers allow you to specify how to *update* a key instead of overwriting it.
+   - operator.add: A reducer used with `Annotated[list, operator.add]` to append elements to a list, or with `Annotated[int, operator.add]` to sum numbers.
+   - add_messages: A pre-built LangGraph reducer (used in `Annotated[list[BaseMessage], add_messages]`) that appends new messages, handles updating existing messages by their ID, and simplifies chat history management.
+
+4. Graph Builder Operations:
+   - builder.add_node(name, function): Registers a state-transforming function as a node in the graph. The function receives the current State and returns a dictionary of updates to apply.
+   - builder.add_edge(source, target): Defines a direct, static transition pathway from a source node to a target node.
+   - builder.compile(): Validates the graph structure and compiles it into a runnable `CompiledStateGraph` instance.
+
+5. Graph Execution & Visualizations:
+   - app.invoke(inputs): Executes the compiled graph synchronously, passing the initial inputs to the state and executing nodes until reaching END.
+   - app.get_graph(): Extracts the structured graph topology object.
+   - app.get_graph().print_ascii(): Renders and prints a text-based ASCII flowchart of the graph's execution flow directly to the terminal.
+   - app.get_graph().draw_mermaid_png(): Generates binary PNG bytes representing the graph's structure using Mermaid syntax.
 """
 
 import operator
@@ -24,14 +50,17 @@ DEFAULT_TEMPERATURE = 0
 # CORE LOGIC: State Definitions & Factory Functions
 # ============================================================
 
+
 # --- 1. Simple State ---
 class SimpleState(TypedDict):
     input: str
     output: str
     step: int
 
+
 def build_simple_graph():
     """Builds a basic single-node graph."""
+
     def process(state: SimpleState) -> dict:
         return {"output": state["input"].upper(), "step": state["step"] + 1}
 
@@ -47,10 +76,13 @@ class AccumulatingState(TypedDict):
     messages: Annotated[list[str], operator.add]
     count: Annotated[int, operator.add]
 
+
 def build_accumulating_graph():
     """Builds a graph demonstrating list/int reducers."""
+
     def step_one(state: AccumulatingState) -> dict:
         return {"messages": ["Step 1 executed"], "count": 1}
+
     def step_two(state: AccumulatingState) -> dict:
         return {"messages": ["Step 2 executed"], "count": 1}
 
@@ -67,9 +99,11 @@ def build_accumulating_graph():
 class MessageState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
+
 def build_message_graph(model_name: str = DEFAULT_MODEL):
     """Builds a standard chat-based graph using add_messages."""
     llm = init_chat_model(model_name, temperature=DEFAULT_TEMPERATURE)
+
     def chat_node(state: MessageState) -> dict:
         response = llm.invoke(state["messages"])
         return {"messages": [response]}
@@ -87,6 +121,7 @@ class MultiStepState(TypedDict):
     analyzed: str
     enhanced: str
     final: str
+
 
 def build_multi_node_graph(model_name: str = DEFAULT_MODEL):
     """Builds a linear 3-node graph for analysis, enhancement, and finalization."""
@@ -121,6 +156,7 @@ class QAState(TypedDict):
     questions: str
     answer: str
 
+
 def build_qa_graph(model_name: str = DEFAULT_MODEL):
     """Builds a graph that generates and answers questions about a topic."""
     llm = init_chat_model(model_name, temperature=DEFAULT_TEMPERATURE)
@@ -145,6 +181,7 @@ def build_qa_graph(model_name: str = DEFAULT_MODEL):
 # ============================================================
 # TEST / SIMULATION
 # ============================================================
+
 
 def run_simple_demo():
     print("=" * 60)
@@ -200,4 +237,4 @@ if __name__ == "__main__":
     # run_accumulating_demo()
     # run_message_demo()
     # run_multi_node_demo()
-    run_qa_exercise()
+    # run_qa_exercise()

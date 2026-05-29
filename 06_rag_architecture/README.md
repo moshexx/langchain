@@ -53,3 +53,57 @@ Stateless LLMs don't remember previous questions. Memory injects chat history in
 - **`advanced_rag.py`**: Demonstrates advanced retrieval techniques like Multi-Query retrieval and Contextual Compression.
 - **`conversation_memory.py`**: Shows how to add state and chat history to your chains.
 - **`research_assistant.py`**: Example of pulling together tools and chains into a cohesive assistant application.
+
+## AI Research Assistant Architecture
+
+The following sequence diagram illustrates the internal flow of the `AIResearchAssistant` class, from initialization and document ingestion to handling structured conversational queries.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant RA as AIResearchAssistant
+    participant Mem as Session Memory
+    participant VS as Chroma Vector Store
+    participant LLM as OpenAI (GPT-4o-mini)
+
+    Note over User, LLM: Initialization Phase
+    User->>RA: __init__(persist_directory)
+    RA->>VS: Initialize Chroma DB
+    RA-->>User: Assistant Ready
+
+    Note over User, LLM: Document Ingestion (Optional)
+    User->>RA: add_documents(docs)
+    RA->>RA: Split documents into chunks
+    RA->>VS: add_documents(chunks)
+    VS-->>RA: Chunks stored
+    RA-->>User: Ingestion complete
+
+    Note over User, LLM: Structured Query Flow (ask_structured)
+    User->>RA: ask_structured(question, session_id)
+    
+    RA->>Mem: _get_session_history(session_id)
+    Mem-->>RA: chat_history
+    
+    RA->>RA: _build_retriever(use_advanced=True)
+    
+    rect rgb(240, 240, 240)
+    Note right of RA: Retrieval Process
+    RA->>VS: invoke(question)
+    VS-->>RA: List[Document] (top k chunks)
+    end
+
+    RA->>RA: _format_docs_for_context(docs)
+    
+    rect rgb(230, 245, 255)
+    Note right of RA: LLM Interaction
+    RA->>LLM: invoke(prompt + history + context)
+    LLM-->>RA: ResearchResponse (Structured Object)
+    end
+
+    RA->>Mem: add_message(HumanMessage)
+    RA->>Mem: add_message(AIMessage)
+    
+    RA-->>User: ResearchResponse (answer, sources, confidence, etc.)
+```
+

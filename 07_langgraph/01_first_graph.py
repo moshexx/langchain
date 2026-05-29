@@ -81,6 +81,19 @@ def run_conversation_demo():
     
     app = build_conversation_graph()
     
+    # Print the graph structure in ASCII
+    print("\n--- Graph Structure ---")
+    app.get_graph().print_ascii()
+    print("-----------------------\n")
+    
+    # Try to save the graph visualization to a PNG file
+    try:
+        with open("graph.png", "wb") as f:
+            f.write(app.get_graph().draw_mermaid_png())
+        print("Graph image saved to 'graph.png'\n")
+    except Exception as e:
+        print(f"Could not save graph image: {e}\n")
+    
     test_messages = [
         "I just got promoted at work! I'm so excited!",
         "My computer crashed and I lost all my work...",
