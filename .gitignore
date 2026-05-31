@@ -28,6 +28,9 @@ env/
 # VS Code
 .vscode/
 
+# Pyright (local IDE config)
+pyrightconfig.json
+
 # Vector databases / local storage
 chroma_db/
 *.sqlite3

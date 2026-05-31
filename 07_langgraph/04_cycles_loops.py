@@ -46,22 +46,26 @@ def build_self_correcting_code_graph(model_name: str = DEFAULT_MODEL):
         code = resp.content.strip()
         if code.startswith("```"):
             code = code.split("```")[1]
-            if code.startswith("python"): code = code[6:]
+            if code.startswith("python"):
+                code = code[6:]
         return {"code": code, "iteration": state["iteration"] + 1}
 
     def validate_code(state: CodeGenState) -> dict:
         code = state["code"]
-        try: compile(code, "<string>", "exec")
-        except SyntaxError as e: return {"errors": [f"Syntax: {e}"], "success": False}
-        
+        try:
+            compile(code, "<string>", "exec")
+        except SyntaxError as e:
+            return {"errors": [f"Syntax: {e}"], "success": False}
+
         # Simulating test execution (e.g. factorial)
         namespace = {}
-        try: 
+        try:
             exec(code, namespace)
             if "solve" in namespace:
                 # Add real tests here if needed
                 pass
-        except Exception as e: return {"errors": [f"Runtime: {e}"], "success": False}
+        except Exception as e:
+            return {"errors": [f"Runtime: {e}"], "success": False}
         return {"success": True}
 
     def should_continue(state: CodeGenState) -> Literal["generate", "end"]:
@@ -92,8 +96,10 @@ def build_iterative_research_graph(model_name: str = DEFAULT_MODEL):
     llm = init_chat_model(model_name, temperature=DEFAULT_TEMPERATURE)
 
     def research(state: ResearchState) -> dict:
-        query = f"Give me key facts about: {state['topic']}" if state["iteration"] == 0 else \
-                f"Go deeper on {state['questions'][-1]} based on {state['findings'][-1]}"
+        if state["iteration"] == 0:
+            query = f"Give me key facts about: {state['topic']}"
+        else:
+            query = f"Go deeper on {state['questions'][-1]} based on {state['findings'][-1]}"
         resp = llm.invoke(query)
         return {"findings": [resp.content]}
 

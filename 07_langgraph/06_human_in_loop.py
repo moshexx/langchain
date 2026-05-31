@@ -76,7 +76,8 @@ def build_review_graph(model_name: str = DEFAULT_MODEL):
         return {"status": "pending_review"}
 
     def apply_feedback(state: ReviewState) -> dict:
-        if not state["review_comments"]: return state
+        if not state["review_comments"]:
+            return state
         feedback = state["review_comments"][-1]
         resp = llm.invoke(f"Revise this document based on feedback:\n\nDocument: {state['document']}\n\nFeedback: {feedback}")
         return {"document": resp.content, "revision_count": state["revision_count"] + 1, "status": "revised"}

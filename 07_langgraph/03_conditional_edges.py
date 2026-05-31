@@ -17,18 +17,22 @@ DEFAULT_TEMPERATURE = 0
 # CORE LOGIC: State Definitions & Factory Functions
 # ============================================================
 
+
 # --- 1. Router Graph ---
 class RouterState(TypedDict):
     query: str
     query_type: str
     response: str
 
+
 def build_router_graph(model_name: str = DEFAULT_MODEL):
     """Builds a graph that routes queries by type (question, command, statement)."""
     llm = init_chat_model(model_name, temperature=DEFAULT_TEMPERATURE)
 
     def classify_query(state: RouterState) -> dict:
-        resp = llm.invoke(f"Classify as 'question', 'command', or 'statement': {state['query']}")
+        resp = llm.invoke(
+            f"Classify as 'question', 'command', or 'statement': {state['query']}"
+        )
         return {"query_type": resp.content.lower().strip()}
 
     def handle_question(state: RouterState) -> dict:
@@ -41,10 +45,14 @@ def build_router_graph(model_name: str = DEFAULT_MODEL):
     def handle_statement(state: RouterState) -> dict:
         return {"response": f"[Acknowledged] {state['query']}"}
 
-    def route_by_type(state: RouterState) -> Literal["question", "command", "statement"]:
-        qt = state["query_type"]
-        if "question" in qt: return "question"
-        if "command" in qt: return "command"
+    def route_by_type(
+        state: RouterState,
+    ) -> Literal["question", "command", "statement"]:
+        query_type = state["query_type"]
+        if "question" in query_type:
+            return "question"
+        if "command" in query_type:
+            return "command"
         return "statement"
 
     builder = StateGraph(RouterState)
@@ -52,17 +60,21 @@ def build_router_graph(model_name: str = DEFAULT_MODEL):
     builder.add_node("handle_question", handle_question)
     builder.add_node("handle_command", handle_command)
     builder.add_node("handle_statement", handle_statement)
-    
+
     builder.add_edge(START, "classify")
-    builder.add_conditional_edges("classify", route_by_type, {
-        "question": "handle_question",
-        "command": "handle_command",
-        "statement": "handle_statement"
-    })
+    builder.add_conditional_edges(
+        "classify",
+        route_by_type,
+        {
+            "question": "handle_question",
+            "command": "handle_command",
+            "statement": "handle_statement",
+        },
+    )
     builder.add_edge("handle_question", END)
     builder.add_edge("handle_command", END)
     builder.add_edge("handle_statement", END)
-    
+
     return builder.compile()
 
 
@@ -74,14 +86,17 @@ class QualityState(TypedDict):
     final_content: str
     iteration: int
 
+
 def build_quality_loop_graph(model_name: str = DEFAULT_MODEL):
     """Builds a graph that iterates until quality score is high enough."""
     llm = init_chat_model(model_name, temperature=DEFAULT_TEMPERATURE)
 
     def evaluate_quality(state: QualityState) -> dict:
         resp = llm.invoke(f"Rate quality 1-10 (number only): {state['content']}")
-        try: score = int(resp.content.strip())
-        except: score = 5
+        try:
+            score = int(resp.content.strip())
+        except:
+            score = 5
         return {"quality_score": score}
 
     def improve_content(state: QualityState) -> dict:
@@ -91,7 +106,7 @@ def build_quality_loop_graph(model_name: str = DEFAULT_MODEL):
     def finalize_content(state: QualityState) -> dict:
         return {
             "final_content": state["content"],
-            "feedback": f"Approved iteration {state['iteration']} (Score: {state['quality_score']})"
+            "feedback": f"Approved iteration {state['iteration']} (Score: {state['quality_score']})",
         }
 
     def should_continue(state: QualityState) -> Literal["improve", "finalize"]:
@@ -103,12 +118,14 @@ def build_quality_loop_graph(model_name: str = DEFAULT_MODEL):
     builder.add_node("evaluate", evaluate_quality)
     builder.add_node("improve", improve_content)
     builder.add_node("finalize", finalize_content)
-    
+
     builder.add_edge(START, "evaluate")
-    builder.add_conditional_edges("evaluate", should_continue, {"improve": "improve", "finalize": "finalize"})
+    builder.add_conditional_edges(
+        "evaluate", should_continue, {"improve": "improve", "finalize": "finalize"}
+    )
     builder.add_edge("improve", "evaluate")
     builder.add_edge("finalize", END)
-    
+
     return builder.compile()
 
 
@@ -120,45 +137,66 @@ class TaskState(TypedDict):
     handler: str
     result: str
 
+
 def build_task_routing_graph(model_name: str = DEFAULT_MODEL):
     """Builds a graph that routes based on urgency and complexity."""
     llm = init_chat_model(model_name, temperature=DEFAULT_TEMPERATURE)
 
     def analyze_task(state: TaskState) -> dict:
-        u_resp = llm.invoke(f"Is this 'urgent' or 'normal'? {state['task']}")
-        c_resp = llm.invoke(f"Is this 'complex' or 'simple'? {state['task']}")
-        return {"urgency": u_resp.content.lower().strip(), "complexity": c_resp.content.lower().strip()}
+        urgency_response = llm.invoke(f"Is this 'urgent' or 'normal'? {state['task']}")
+        complexity_response = llm.invoke(f"Is this 'complex' or 'simple'? {state['task']}")
+        return {
+            "urgency": urgency_response.content.lower().strip(),
+            "complexity": complexity_response.content.lower().strip(),
+        }
 
     def route_task(state: TaskState) -> str:
-        u, c = "urgent" in state["urgency"], "complex" in state["complexity"]
-        if u and c: return "urgent_complex"
-        if u: return "urgent_simple"
-        if c: return "normal_complex"
+        is_urgent = "urgent" in state["urgency"]
+        is_complex = "complex" in state["complexity"]
+        if is_urgent and is_complex:
+            return "urgent_complex"
+        if is_urgent:
+            return "urgent_simple"
+        if is_complex:
+            return "normal_complex"
         return "normal_simple"
 
     builder = StateGraph(TaskState)
     builder.add_node("analyze", analyze_task)
-    builder.add_node("urgent_complex", lambda x: {"handler": "Senior", "result": "Escalated"})
-    builder.add_node("urgent_simple", lambda x: {"handler": "Quick", "result": "Handled fast"})
-    builder.add_node("normal_complex", lambda x: {"handler": "Specialist", "result": "Assigned"})
-    builder.add_node("normal_simple", lambda x: {"handler": "Standard", "result": "Queued"})
+    builder.add_node(
+        "urgent_complex", lambda x: {"handler": "Senior", "result": "Escalated"}
+    )
+    builder.add_node(
+        "urgent_simple", lambda x: {"handler": "Quick", "result": "Handled fast"}
+    )
+    builder.add_node(
+        "normal_complex", lambda x: {"handler": "Specialist", "result": "Assigned"}
+    )
+    builder.add_node(
+        "normal_simple", lambda x: {"handler": "Standard", "result": "Queued"}
+    )
 
     builder.add_edge(START, "analyze")
-    builder.add_conditional_edges("analyze", route_task, {
-        "urgent_complex": "urgent_complex",
-        "urgent_simple": "urgent_simple",
-        "normal_complex": "normal_complex",
-        "normal_simple": "normal_simple"
-    })
+    builder.add_conditional_edges(
+        "analyze",
+        route_task,
+        {
+            "urgent_complex": "urgent_complex",
+            "urgent_simple": "urgent_simple",
+            "normal_complex": "normal_complex",
+            "normal_simple": "normal_simple",
+        },
+    )
     for node in ["urgent_complex", "urgent_simple", "normal_complex", "normal_simple"]:
         builder.add_edge(node, END)
-    
+
     return builder.compile()
 
 
 # ============================================================
 # TEST / SIMULATION
 # ============================================================
+
 
 def run_router_demo():
     print("=" * 60)
@@ -176,7 +214,15 @@ def run_loop_demo():
     print("CONDITIONAL LOOP DEMO")
     print("=" * 60)
     app = build_quality_loop_graph()
-    res = app.invoke({"content": "AI is cool", "quality_score": 0, "feedback": "", "final_content": "", "iteration": 0})
+    res = app.invoke(
+        {
+            "content": "AI is cool",
+            "quality_score": 0,
+            "feedback": "",
+            "final_content": "",
+            "iteration": 0,
+        }
+    )
     print(f"Final: {res['final_content'][:100]}...\n{res['feedback']}\n")
 
 

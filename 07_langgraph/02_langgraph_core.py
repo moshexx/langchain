@@ -139,7 +139,7 @@ def build_multi_node_graph(model_name: str = DEFAULT_MODEL):
         resp = llm.invoke(f"Finalize this into a summary: {state['enhanced']}")
         return {"final": resp.content}
 
-    builder = StateGraph(MultiStepState)
+    builder = StateGraph(MultiStepState)  # type: ignore
     builder.add_node("analyze", analyze)
     builder.add_node("enhance", enhance)
     builder.add_node("finalize", finalize)
@@ -169,7 +169,7 @@ def build_qa_graph(model_name: str = DEFAULT_MODEL):
         resp = llm.invoke(f"Answer the first question here:\n{state['questions']}")
         return {"answer": resp.content}
 
-    builder = StateGraph(QAState)
+    builder = StateGraph(QAState)  # type: ignore
     builder.add_node("generate_questions", generate_questions)
     builder.add_node("answer_question", answer_question)
     builder.add_edge(START, "generate_questions")
